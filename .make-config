@@ -1,0 +1,7 @@
+##
+# This is the CloudFormation stack name that SAM will use
+AWS_CLOUDFORMATION_STACK_NAME := new-lambda-service
+
+AWS_SAM_PROFILE := default
+
+AWS_SAM_PACKAGE_BUCKET := my-s3-binary-bucket

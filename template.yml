@@ -1,0 +1,15 @@
+---
+Transform: AWS::Serverless-2016-10-31
+Globals:
+  Function:
+    Runtime: go1.x
+    Timeout: 10
+    MemorySize: 128
+Resources:
+  FunctionHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: build/
+      Handler: function
+      Policies:
+        - AWSLambdaBasicExecutionRole
