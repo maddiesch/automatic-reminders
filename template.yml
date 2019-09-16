@@ -85,7 +85,7 @@ Resources:
       DomainName: !Sub
         - "api.${AWS::Region}.${Domain}"
         - Domain: !ImportValue AutoRemindersDomain
-      RegionalCertificateArn: AutoRemindersCertificateArn
+      RegionalCertificateArn: !ImportValue AutoRemindersCertificateArn
       EndpointConfiguration:
         Types:
           - REGIONAL
