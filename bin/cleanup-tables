@@ -1,0 +1,8 @@
+#!/bin/bash
+
+tables=$(aws dynamodb list-tables --endpoint http://127.0.0.1:8000 | jq --raw-output '.TableNames[] | select(startswith("test-table"))')
+
+for table in $tables; do
+  aws dynamodb delete-table --table-name $table --endpoint http://127.0.0.1:8000 >& /dev/null
+  echo "delete: $table"
+done

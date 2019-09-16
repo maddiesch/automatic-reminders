@@ -3,13 +3,80 @@ Transform: AWS::Serverless-2016-10-31
 Globals:
   Function:
     Runtime: go1.x
-    Timeout: 10
+    Timeout: 30
     MemorySize: 128
+    Environment:
+      Variables:
+        SECRETS_CLIENT_ID_PARAMETER_NAME: !ImportValue AutoRemindersProductionClientID
+        SECRETS_CLIENT_SECRET_PARAMETER_NAME: !ImportValue AutoRemindersProductionClientSecret
+        SECRETS_PRODUCTION_SIGNING_SECRET_PARAMETER_NAME: !ImportValue AutoRemindersProductionTokenSecret
+        DYNAMODB_TABLE_NAME: !ImportValue AutoRemindersProductionDynamoDBTableName
 Resources:
-  FunctionHandler:
+  ##
+  # API Resources
+  Api:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: production
+  ApiFunctionHandler:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: build/
-      Handler: function
+      Handler: api-handler
       Policies:
         - AWSLambdaBasicExecutionRole
+        - !Ref LambdaPolicy
+      Events:
+        RootApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Method: any
+            Path: /
+        RoutedApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref Api
+            Method: any
+            Path: /{proxy+}
+  ##
+  # Security Resources
+  LambdaPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action:
+              - ssm:GetParameter
+              - ssm:GetParameters
+            Resource:
+              - !Sub
+                - arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Name}
+                - Name: !ImportValue AutoRemindersProductionClientID
+              - !Sub
+                - arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Name}
+                - Name: !ImportValue AutoRemindersProductionClientSecret
+              - !Sub
+                - arn:aws:ssm:${AWS::Region}:${AWS::AccountId}:parameter/${Name}
+                - Name: !ImportValue AutoRemindersProductionTokenSecret
+          - Effect: Allow
+            Action:
+              - dynamodb:GetItem
+              - dynamodb:DeleteItem
+              - dynamodb:PutItem
+              - dynamodb:Scan
+              - dynamodb:Query
+              - dynamodb:UpdateItem
+              - dynamodb:BatchWriteItem
+              - dynamodb:BatchGetItem
+              - dynamodb:DescribeTable
+            Resource:
+              - !ImportValue AutoRemindersProductionDynamoDBTableArn
+              - !Sub
+                - "${TableArn}/index/*"
+                - TableArn: !ImportValue AutoRemindersProductionDynamoDBTableArn
+Outputs:
+  Api:
+    Value: !Sub https://${Api}.execute-api.${AWS::Region}.amazonaws.com/production/

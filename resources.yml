@@ -1,0 +1,111 @@
+---
+Resources:
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+        - AttributeName: SK
+          AttributeType: S
+        - AttributeName: LSI1SK
+          AttributeType: S
+        - AttributeName: LSI2SK
+          AttributeType: S
+        - AttributeName: GSI1PK
+          AttributeType: S
+        - AttributeName: GSI1SK
+          AttributeType: S
+        - AttributeName: GSI2PK
+          AttributeType: S
+        - AttributeName: GSI2SK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+        - AttributeName: SK
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: GSI1
+          KeySchema:
+            - AttributeName: GSI1PK
+              KeyType: HASH
+            - AttributeName: GSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: GSI2
+          KeySchema:
+            - AttributeName: GSI2PK
+              KeyType: HASH
+            - AttributeName: GSI2SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: KEYS_ONLY
+      LocalSecondaryIndexes:
+        - IndexName: LSI1
+          KeySchema:
+            - AttributeName: PK
+              KeyType: HASH
+            - AttributeName: LSI1SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: LSI2
+          KeySchema:
+            - AttributeName: PK
+              KeyType: HASH
+            - AttributeName: LSI2SK
+              KeyType: RANGE
+          Projection:
+            ProjectionType: KEYS_ONLY
+      TimeToLiveSpecification:
+        AttributeName: ExpiresAt
+        Enabled: true
+      SSESpecification:
+        SSEEnabled: true
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+      Tags:
+        - Key: Application
+          Value: auto-reminders
+  AutomaticApiClientID:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Tier: Standard
+      Value: replace-me
+  AutomaticApiClientSecret:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Tier: Standard
+      Value: replace-me
+  ApiTokenSigningSecret:
+    Type: AWS::SSM::Parameter
+    Properties:
+      Type: String
+      Tier: Standard
+      Value: replace-me
+Outputs:
+  TableName:
+    Value: !Ref DynamoDBTable
+    Export:
+      Name: AutoRemindersProductionDynamoDBTableName
+  TableArn:
+    Value: !GetAtt DynamoDBTable.Arn
+    Export:
+      Name: AutoRemindersProductionDynamoDBTableArn
+  ClientID:
+    Value: !Ref AutomaticApiClientID
+    Export:
+      Name: AutoRemindersProductionClientID
+  ClientSecret:
+    Value: !Ref AutomaticApiClientSecret
+    Export:
+      Name: AutoRemindersProductionClientSecret
+  TokenSecret:
+    Value: !Ref ApiTokenSigningSecret
+    Export:
+      Name: AutoRemindersProductionTokenSecret

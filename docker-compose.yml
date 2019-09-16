@@ -1,0 +1,16 @@
+version: "2"
+services:
+  dynamodb:
+    image: amazon/dynamodb-local
+    ports:
+      - 8000:8000
+    command:
+      - -jar
+      - DynamoDBLocal.jar
+      - -sharedDb
+      - -sharedDb
+      - /home/dynamodblocal/data/
+    volumes:
+      - dynamodb_data:/home/dynamodblocal/data
+volumes:
+  dynamodb_data: {}
