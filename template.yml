@@ -77,6 +77,37 @@ Resources:
               - !Sub
                 - "${TableArn}/index/*"
                 - TableArn: !ImportValue AutoRemindersProductionDynamoDBTableArn
+  ##
+  # Domain
+  ApiRegionalDomain:
+    Type: AWS::ApiGateway::DomainName
+    Properties:
+      DomainName: !Sub
+        - "api.${AWS::Region}.${Domain}"
+        - Domain: !ImportValue AutoRemindersDomain
+      RegionalCertificateArn: AutoRemindersCertificateArn
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+  ApiRegionalMapping:
+    Type: AWS::ApiGateway::BasePathMapping
+    Properties:
+      DomainName: !Ref ApiRegionalDomain
+      RestApiId: !Ref Api
+      Stage: production
+  ApiRegionalDomainRecords:
+    Type: AWS::Route53::RecordSetGroup
+    Properties:
+      HostedZoneId: !ImportValue AutoRemindersHostedZoneID
+      RecordSets:
+        - Name: !Sub
+            - "api.${AWS::Region}.${Domain}."
+            - Domain: !ImportValue AutoRemindersDomain
+          Type: A
+          AliasTarget:
+            HostedZoneId: !GetAtt ApiRegionalDomain.RegionalHostedZoneId
+            DNSName: !GetAtt ApiRegionalDomain.RegionalDomainName
+            EvaluateTargetHealth: false
 Outputs:
   Api:
-    Value: !Sub https://${Api}.execute-api.${AWS::Region}.amazonaws.com/production/
+    Value: !Sub https://${ApiRegionalDomain}/v1/

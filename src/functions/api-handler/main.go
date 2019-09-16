@@ -11,22 +11,19 @@ import (
 func main() {
 	lambda.Start(serverless.LambdaHandler(func() {
 		serverless.SharedApp().ConfigureGin(func(e *gin.Engine) {
-			api := e.Group("/api")
+			v1 := e.Group("/v1")
 			{
-				v1 := api.Group("/v1")
+				v1.Handle("GET", "/", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{}) })
+
+				integration := v1.Group("/integration")
 				{
-					v1.Handle("GET", "/", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{}) })
+					integration.Handle("GET", "/automatic/authenticate", integrationAutomaticAuthHandler)
+					integration.Handle("GET", "/automatic/authenticate/callback", integrationAutomaticAuthCallbackHandler)
+				}
 
-					integration := v1.Group("/integration")
-					{
-						integration.Handle("GET", "/automatic/authenticate", integrationAutomaticAuthHandler)
-						integration.Handle("GET", "/automatic/authenticate/callback", integrationAutomaticAuthCallbackHandler)
-					}
-
-					private := v1.Group("/private", Authenticate)
-					{
-						private.Handle("GET", "/", getAccountHandler)
-					}
+				private := v1.Group("/private", Authenticate)
+				{
+					private.Handle("GET", "/", getAccountHandler)
 				}
 			}
 		})

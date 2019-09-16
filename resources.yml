@@ -1,4 +1,7 @@
 ---
+Parameters:
+  DomainParameter:
+    Type: String
 Resources:
   DynamoDBTable:
     Type: AWS::DynamoDB::Table
@@ -88,6 +91,18 @@ Resources:
       Type: String
       Tier: Standard
       Value: replace-me
+  HostedZone:
+    Type: AWS::Route53::HostedZone
+    Properties:
+      Name: !Sub ${DomainParameter}.
+  Certificate:
+    Type: AWS::CertificateManager::Certificate
+    Properties:
+      DomainName: !Ref DomainParameter
+      ValidationMethod: DNS
+      SubjectAlternativeNames:
+        - !Sub "*.${DomainParameter}"
+        - !Sub "*.${AWS::Region}.${DomainParameter}"
 Outputs:
   TableName:
     Value: !Ref DynamoDBTable
@@ -109,3 +124,15 @@ Outputs:
     Value: !Ref ApiTokenSigningSecret
     Export:
       Name: AutoRemindersProductionTokenSecret
+  HostedZoneID:
+    Value: !Ref HostedZone
+    Export:
+      Name: AutoRemindersHostedZoneID
+  Domain:
+    Value: !Ref DomainParameter
+    Export:
+      Name: AutoRemindersDomain
+  Certificate:
+    Value: !Ref Certificate
+    Export:
+      Name: AutoRemindersCertificateArn

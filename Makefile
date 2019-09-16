@@ -61,7 +61,12 @@ deploy: package
 
 .PHONY: deploy-resources
 deploy-resources:
-	aws cloudformation deploy --template-file $(ROOT_DIR)/resources.yml --stack-name $(AWS_CLOUDFORMATION_RESOURCES_STACK_NAME) --capabilities CAPABILITY_IAM
+	aws cloudformation deploy \
+		--template-file $(ROOT_DIR)/resources.yml \
+		--stack-name $(AWS_CLOUDFORMATION_RESOURCES_STACK_NAME) \
+		--capabilities CAPABILITY_IAM \
+		--parameter-overrides \
+			"DomainParameter=$(BASE_DOMAIN)"
 
 .PHONY: start-local
 start-local:
