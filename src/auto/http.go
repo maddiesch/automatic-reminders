@@ -25,7 +25,7 @@ func getHTTPStack() *httpStack {
 	httpStackInstanceSetup.Do(func() {
 		httpStackInstance = &httpStack{
 			client: &http.Client{
-				Timeout: 10 * time.Second,
+				Timeout: 20 * time.Second,
 			},
 			sender: func(c *http.Client, r *http.Request) (*http.Response, error) {
 				return c.Do(r)

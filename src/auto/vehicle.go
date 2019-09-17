@@ -22,7 +22,7 @@ type Vehicle struct {
 	LastKnownUserInputMeters int64
 
 	// Automatic Attributes
-	AutomaticID        string
+	AutomaticID        string `json:"-"`
 	FuelGrade          string
 	AutomaticCreatedAt time.Time
 	AutomaticUpdatedAt time.Time
@@ -88,7 +88,7 @@ func UpdateVehiclesForAccount(account *Account, token *AutomaticAccessToken) err
 
 	items := []*dynamodb.TransactWriteItem{}
 	for _, result := range object.Vehicles {
-		id := ksuid.New().String()
+		id := fmt.Sprintf("vid:%s", ksuid.New().String())
 		currentTime := time.Now()
 
 		pk := fmt.Sprintf("vehicle/%s", result.AutomaticID)
@@ -169,6 +169,7 @@ func UpdateVehiclesForAccount(account *Account, token *AutomaticAccessToken) err
 				"AutomaticID":     {S: aws.String(result.AutomaticID)},
 				"M_LastUpdatedAt": DynamoTime(time.Now()),
 				"M_Type":          {S: aws.String("vehicle_account")},
+				"M_Visible":       {N: aws.String("1")},
 			},
 		}
 
@@ -192,11 +193,13 @@ func VehiclesForAccount(account *Account) ([]*Vehicle, error) {
 		IndexName:              aws.String("GSI1"),
 		KeyConditionExpression: aws.String("GSI1PK = :pk AND begins_with(GSI1SK, :sk)"),
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
-			":pk": {S: aws.String(fmt.Sprintf("av/%s", account.ID))},
-			":sk": {S: aws.String("av/")},
+			":pk":      {S: aws.String(fmt.Sprintf("av/%s", account.ID))},
+			":sk":      {S: aws.String("av/")},
+			":visible": {N: aws.String("1")},
 		},
-		Limit:                aws.Int64(25),
+		Limit:                aws.Int64(50),
 		ProjectionExpression: aws.String("AutomaticID"),
+		FilterExpression:     aws.String("M_Visible = :visible"),
 	}
 
 	output, err := DynamoDB().Query(query)
@@ -225,8 +228,14 @@ func VehiclesForAccount(account *Account) ([]*Vehicle, error) {
 		Keys: keys,
 	}
 
-	results, err := DynamoDB().BatchGetItem(&dynamodb.BatchGetItemInput{
+	items := []map[string]*dynamodb.AttributeValue{}
+	err = DynamoDB().BatchGetItemPages(&dynamodb.BatchGetItemInput{
 		RequestItems: requestItems,
+	}, func(o *dynamodb.BatchGetItemOutput, _ bool) bool {
+		for _, item := range o.Responses[table] {
+			items = append(items, item)
+		}
+		return true
 	})
 	if err != nil {
 		return []*Vehicle{}, err
@@ -234,25 +243,23 @@ func VehiclesForAccount(account *Account) ([]*Vehicle, error) {
 
 	vehicles := []*Vehicle{}
 
-	for _, item := range results.Responses[table] {
-		fmt.Println(item)
-
-		// 	ID                       string
-		// CreatedAt                time.Time
-		// UpdatedAt                time.Time
-		// MetersTraveled           int64
-		// MetersTraveledType       string
-		// LastKnownUserInputMeters int64
-
-		// // Automatic Attributes
-		// AutomaticID        string
-		// FuelGrade          string
-		// AutomaticCreatedAt time.Time
-		// AutomaticUpdatedAt time.Time
-		// Make               string
-		// Model              string
-		// SubModel           string
-		// Year               int
+	for _, item := range items {
+		vehicles = append(vehicles, &Vehicle{
+			ID:                       aws.StringValue(item["VehicleID"].S),
+			CreatedAt:                TimeFromDynamo(item["CreatedAt"]),
+			UpdatedAt:                TimeFromDynamo(item["UpdatedAt"]),
+			MetersTraveled:           IntFromDynamo(item["MetersTraveled"]),
+			MetersTraveledType:       aws.StringValue(item["MetersTraveledType"].S),
+			LastKnownUserInputMeters: IntFromDynamo(item["LastKnownUserInputMeters"]),
+			AutomaticID:              aws.StringValue(item["A_ID"].S),
+			FuelGrade:                aws.StringValue(item["A_FuelGrade"].S),
+			AutomaticCreatedAt:       TimeFromDynamo(item["A_CreatedAt"]),
+			AutomaticUpdatedAt:       TimeFromDynamo(item["A_UpdatedAt"]),
+			Make:                     aws.StringValue(item["A_Make"].S),
+			Model:                    aws.StringValue(item["A_Model"].S),
+			SubModel:                 aws.StringValue(item["A_SubModel"].S),
+			Year:                     int(IntFromDynamo(item["A_Year"])),
+		})
 	}
 
 	return vehicles, nil
