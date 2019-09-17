@@ -46,16 +46,21 @@ func HashString(s string) string {
 	return fmt.Sprintf("%x", sha256.Sum256([]byte(s)))
 }
 
-// TimeFromDynamo parses and returns the time from a dynamodb attribute value
-func TimeFromDynamo(a *dynamodb.AttributeValue) time.Time {
+// IntFromDynamo returns a 64bit integer from the dynamo attribute value
+func IntFromDynamo(a *dynamodb.AttributeValue) int64 {
 	if a == nil || a.N == nil {
-		return time.Time{}
+		return 0
 	}
 
 	value, err := strconv.ParseInt(aws.StringValue(a.N), 10, 64)
 	if err != nil {
-		return time.Time{}
+		return 0
 	}
 
-	return time.Unix(value, 0)
+	return value
+}
+
+// TimeFromDynamo parses and returns the time from a dynamodb attribute value
+func TimeFromDynamo(a *dynamodb.AttributeValue) time.Time {
+	return time.Unix(IntFromDynamo(a), 0)
 }

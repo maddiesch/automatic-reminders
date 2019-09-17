@@ -7,36 +7,19 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"net/url"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
+	"github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/gin-gonic/gin"
 	"github.com/maddiesch/automatic-reminders/auto"
+	"github.com/maddiesch/serverless"
+	"github.com/maddiesch/serverless/amazon"
 	"github.com/segmentio/ksuid"
 )
-
-const (
-	automaticIndexSortKeyValue = "_AUTOMATIC_ACCOUNT"
-)
-
-func automaticAccountsURL(path string) *url.URL {
-	return &url.URL{
-		Scheme: "https",
-		Host:   "accounts.automatic.com",
-		Path:   path,
-	}
-}
-
-func automaticAPIURL(path string) *url.URL {
-	return &url.URL{
-		Scheme: "https",
-		Host:   "api.automatic.com",
-		Path:   path,
-	}
-}
 
 func automaticAPISignedRequest(method, path, token string, body interface{}) (*http.Request, error) {
 	payload := bytes.NewBuffer(nil)
@@ -52,7 +35,7 @@ func automaticAPISignedRequest(method, path, token string, body interface{}) (*h
 		}
 	}
 
-	request, err := http.NewRequest(method, automaticAPIURL(path).String(), payload)
+	request, err := http.NewRequest(method, auto.AutomaticAPIURL(path).String(), payload)
 	request.Header.Set("Accept", "application/json")
 	request.Header.Set("Authorization", fmt.Sprintf("Bearer %s", token))
 	if payload != nil {
@@ -108,7 +91,7 @@ func integrationCreateAutomaticAuthenticationURL() (string, error) {
 		fmt.Sprintf("state=%s", state),
 	}
 
-	uri := automaticAccountsURL("/oauth/authorize/")
+	uri := auto.AutomaticAccountsURL("/oauth/authorize/")
 	uri.RawQuery = strings.Join(values, "&")
 
 	return uri.String(), nil
@@ -157,13 +140,13 @@ func integrationAutomaticAuthCallback(code, state string) (string, error) {
 		"grant_type":    "authorization_code",
 	})
 
-	req, err := http.NewRequest("POST", automaticAccountsURL("/oauth/access_token/").String(), bytes.NewBuffer([]byte(payload)))
+	req, err := http.NewRequest("POST", auto.AutomaticAccountsURL("/oauth/access_token/").String(), bytes.NewBuffer([]byte(payload)))
 	req.Header.Set("Content-Type", "application/json")
 	if err != nil {
 		return "", err
 	}
 
-	response, err := sendRequest(req)
+	response, err := auto.SendRequest(req)
 	if err != nil {
 		return "", err
 	}
@@ -173,7 +156,10 @@ func integrationAutomaticAuthCallback(code, state string) (string, error) {
 		return "", err
 	}
 
-	token := auto.AutomaticAccessToken{}
+	token := auto.AutomaticAccessToken{
+		ID:       ksuid.New().String(),
+		IssuedAt: time.Now(),
+	}
 
 	err = json.Unmarshal(body, &token)
 	if err != nil {
@@ -186,7 +172,7 @@ func integrationAutomaticAuthCallback(code, state string) (string, error) {
 		KeyConditionExpression: aws.String("#pk = :pk AND #sk = :sk"),
 		ExpressionAttributeValues: map[string]*dynamodb.AttributeValue{
 			":pk": auto.FormatString("automatic/%s", token.UserID),
-			":sk": {S: aws.String(automaticIndexSortKeyValue)},
+			":sk": {S: aws.String(auto.AutomaticIndexSortKeyValue)},
 		},
 		ExpressionAttributeNames: map[string]*string{
 			"#pk": aws.String("GSI2PK"),
@@ -221,6 +207,20 @@ func integrationAutomaticAuthCallback(code, state string) (string, error) {
 		Key:       requestKey,
 	})
 
+	if functionName := os.Getenv("UPDATE_VEHICLES_FUNCTION"); functionName != "" {
+		payload, err := json.Marshal(map[string]interface{}{
+			"AccountID": account.ID,
+		})
+		if err == nil {
+			client := lambda.New(amazon.BaseSession())
+			client.Invoke(&lambda.InvokeInput{
+				FunctionName:   aws.String(functionName),
+				InvocationType: aws.String("Event"),
+				Payload:        payload,
+			})
+		}
+	}
+
 	return apiTokenForAccount(account)
 }
 
@@ -252,7 +252,7 @@ func integrationAutomaticAuthCreateAccount(token auto.AutomaticAccessToken) (*au
 		return nil, err
 	}
 
-	response, err := sendRequest(request)
+	response, err := auto.SendRequest(request)
 	if err != nil {
 		return nil, err
 	}
@@ -288,62 +288,36 @@ func integrationAutomaticAuthCreateAccount(token auto.AutomaticAccessToken) (*au
 }
 
 func integrationAutomaticWriteAccountInformation(account *auto.Account, user *automaticUserStructure, token auto.AutomaticAccessToken) error {
-	primaryKey := account.PrimaryKey()
-
-	items := []*dynamodb.TransactWriteItem{
-		&dynamodb.TransactWriteItem{
-			Put: &dynamodb.Put{
-				TableName: auto.TableName(),
-				Item: map[string]*dynamodb.AttributeValue{
-					"PK":                  {S: aws.String(primaryKey.HashKey)},
-					"SK":                  {S: aws.String(primaryKey.SortKey)},
-					"GSI2PK":              auto.FormatString("automatic/%s", token.UserID),
-					"GSI2SK":              {S: aws.String(automaticIndexSortKeyValue)},
-					"FirstName":           {S: aws.String(account.FirstName)},
-					"LastName":            {S: aws.String(account.LastName)},
-					"AutomaticID":         {S: aws.String(token.UserID)},
-					"CreatedAt":           auto.DynamoTime(account.CreatedAt),
-					"UpdatedAt":           auto.DynamoTime(time.Now()),
-					"LastAuthenticatedAt": auto.DynamoTime(time.Now()),
+	return auto.WriteAccountWithToken(account, &token, func(a *auto.Account, t *auto.AutomaticAccessToken) []*dynamodb.TransactWriteItem {
+		if user == nil {
+			return []*dynamodb.TransactWriteItem{}
+		}
+		return []*dynamodb.TransactWriteItem{
+			&dynamodb.TransactWriteItem{
+				Put: &dynamodb.Put{
+					TableName: auto.TableName(),
+					Item: map[string]*dynamodb.AttributeValue{
+						"PK":             {S: aws.String(a.PrimaryKey().HashKey)},
+						"SK":             auto.FormatString("contact/%s/_EMAIL", auto.HashString(user.Email)),
+						"ContactValue":   {S: aws.String(user.Email)},
+						"ContactType":    {S: aws.String("EMAIL")},
+						"ReceiveContact": {N: aws.String("1")},
+					},
 				},
 			},
-		},
-		&dynamodb.TransactWriteItem{
-			Put: &dynamodb.Put{
-				TableName: auto.TableName(),
-				Item: map[string]*dynamodb.AttributeValue{
-					"PK":           {S: aws.String(primaryKey.HashKey)},
-					"SK":           auto.FormatString("access-token/%s", ksuid.New().String()),
-					"ExpiresAt":    auto.DynamoTime(time.Now().Add(time.Duration(token.ExpiresIn)/time.Second).AddDate(0, 0, 90)),
-					"ExpiresIn":    {N: aws.String(fmt.Sprintf("%d", token.ExpiresIn))},
-					"Scopes":       {SS: aws.StringSlice(strings.Split(token.Scope, " "))},
-					"AccessToken":  {S: aws.String(token.AccessToken)},
-					"RefreshToken": {S: aws.String(token.RefreshToken)},
-					"GSI1PK":       auto.FormatString("access_token/%s", token.UserID),
-					"GSI2SK":       auto.FormatString("token-for/%s", primaryKey.HashKey),
-				},
-			},
-		},
-	}
-
-	if user != nil {
-		items = append(items, &dynamodb.TransactWriteItem{
-			Put: &dynamodb.Put{
-				TableName: auto.TableName(),
-				Item: map[string]*dynamodb.AttributeValue{
-					"PK":             {S: aws.String(primaryKey.HashKey)},
-					"SK":             auto.FormatString("contact/%s/_EMAIL", auto.HashString(user.Email)),
-					"ContactValue":   {S: aws.String(user.Email)},
-					"ContactType":    {S: aws.String("EMAIL")},
-					"ReceiveContact": {N: aws.String("1")},
-				},
-			},
-		})
-	}
-
-	_, err := auto.DynamoDB().TransactWriteItems(&dynamodb.TransactWriteItemsInput{
-		TransactItems: items,
+		}
 	})
+}
 
-	return err
+func integrationAutomaticHookshotHandler(c *gin.Context) {
+	body, err := c.GetRawData()
+	if err != nil {
+		reportError(err, false)
+		respondWithError(c, err)
+		return
+	}
+
+	serverless.Log(string(body))
+
+	c.Status(http.StatusNoContent)
 }

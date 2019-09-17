@@ -7,7 +7,7 @@ import (
 	"github.com/maddiesch/automatic-reminders/auto"
 )
 
-func getAccountHandler(c *gin.Context) {
+func getVehiclesHandler(c *gin.Context) {
 	accountID := c.GetString(contextUserIDKey)
 	account, err := auto.FindAccount(accountID)
 	if err != nil {
@@ -16,5 +16,12 @@ func getAccountHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, account)
+	vehicles, err := auto.VehiclesForAccount(account)
+	if err != nil {
+		reportError(err, false)
+		respondWithError(c, err)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"Vehicles": vehicles})
 }

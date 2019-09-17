@@ -26,6 +26,16 @@ Resources:
       Policies:
         - AWSLambdaBasicExecutionRole
         - !Ref LambdaPolicy
+        - Version: 2012-10-17
+          Statement:
+            Effect: Allow
+            Action:
+              - lambda:Invoke
+            Resource:
+              - !GetAtt UpdateVehiclesFunctionHandler.Arn
+      Environment:
+        Variables:
+          UPDATE_VEHICLES_FUNCTION: !Ref UpdateVehiclesFunctionHandler
       Events:
         RootApiEvent:
           Type: Api
@@ -39,6 +49,16 @@ Resources:
             RestApiId: !Ref Api
             Method: any
             Path: /{proxy+}
+  ##
+  # Functions
+  UpdateVehiclesFunctionHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: build/
+      Handler: update-vehicles-handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - !Ref LambdaPolicy
   ##
   # Security Resources
   LambdaPolicy:

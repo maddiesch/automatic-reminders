@@ -56,3 +56,63 @@ func (a *Account) PrimaryKey() PrimaryKey {
 		SortKey: accountRecordSortKey,
 	}
 }
+
+// DynamoItem returns the DynamoDB AttributeValues for the account
+func (a *Account) DynamoItem() (map[string]*dynamodb.AttributeValue, error) {
+	pk := a.PrimaryKey()
+
+	return map[string]*dynamodb.AttributeValue{
+		"PK":                  {S: aws.String(pk.HashKey)},
+		"SK":                  {S: aws.String(pk.SortKey)},
+		"GSI2PK":              FormatString("automatic/%s", a.AutomaticID),
+		"GSI2SK":              {S: aws.String(AutomaticIndexSortKeyValue)},
+		"FirstName":           {S: aws.String(a.FirstName)},
+		"LastName":            {S: aws.String(a.LastName)},
+		"AutomaticID":         {S: aws.String(a.AutomaticID)},
+		"CreatedAt":           DynamoTime(a.CreatedAt),
+		"UpdatedAt":           DynamoTime(time.Now()),
+		"LastAuthenticatedAt": DynamoTime(time.Now()),
+	}, nil
+}
+
+// WriteAccountWithToken saves an account & token. Also lets you save other objects alongside in the transaction.
+func WriteAccountWithToken(a *Account, t *AutomaticAccessToken, fn func(*Account, *AutomaticAccessToken) []*dynamodb.TransactWriteItem) error {
+	primaryKey := a.PrimaryKey()
+
+	accountItem, err := a.DynamoItem()
+	if err != nil {
+		return err
+	}
+
+	tokenItem, err := t.DynamoItem(primaryKey)
+	if err != nil {
+		return err
+	}
+
+	items := []*dynamodb.TransactWriteItem{
+		&dynamodb.TransactWriteItem{
+			Put: &dynamodb.Put{
+				TableName: TableName(),
+				Item:      accountItem,
+			},
+		},
+		&dynamodb.TransactWriteItem{
+			Put: &dynamodb.Put{
+				TableName: TableName(),
+				Item:      tokenItem,
+			},
+		},
+	}
+
+	if fn != nil {
+		for _, item := range fn(a, t) {
+			items = append(items, item)
+		}
+	}
+
+	_, err = DynamoDB().TransactWriteItems(&dynamodb.TransactWriteItemsInput{
+		TransactItems: items,
+	})
+
+	return err
+}

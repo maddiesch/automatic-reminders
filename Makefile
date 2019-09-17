@@ -33,13 +33,16 @@ all: clean test build
 .PHONY: build
 build:
 	cd $(SRC_DIR)/functions/api-handler && $(GO_LAMBDA_ENV) go build -o $(BUILD_DIR)/api-handler .
+	cd $(SRC_DIR)/functions/update-vehicles-handler && $(GO_LAMBDA_ENV) go build -o $(BUILD_DIR)/update-vehicles-handler .
 
 .PHONY: test
+test: test_cmd := TEST_TABLE_NAME=$(TEST_TABLE_NAME) TESTING_ENV_FILE=$(ENV_FILE_PATH) go test -tags testing -v ./...
 test:
 	$(ROOT_DIR)/bin/cleanup-tables >& /dev/null
 	$(ROOT_DIR)/bin/create-table $(TEST_TABLE_NAME) >& /dev/null
-	cd $(SRC_DIR)/auto && go test -v ./...
-	cd $(SRC_DIR)/functions/api-handler && TEST_TABLE_NAME=$(TEST_TABLE_NAME) TESTING_ENV_FILE=$(ENV_FILE_PATH) go test -v ./...
+	cd $(SRC_DIR)/auto && $(test_cmd)
+	cd $(SRC_DIR)/functions/api-handler && $(test_cmd)
+	cd $(SRC_DIR)/functions/update-vehicles-handler && $(test_cmd)
 	aws dynamodb delete-table --table-name $(TEST_TABLE_NAME) --endpoint http://127.0.0.1:8000/ >& /dev/null
 
 .PHONY: clean
@@ -49,7 +52,11 @@ clean:
 
 .PHONY: run
 run: clean build
-	sam local start-api --env-vars $(ENV_FILE_PATH)
+	sam local start-api --template $(AWS_SAM_TEMPLATE_FILE) --env-vars $(ENV_FILE_PATH)
+
+.PHONY: invoke-update-vehicles
+invoke-update-vehicles: build
+	sam local invoke UpdateVehiclesFunctionHandler --template $(AWS_SAM_TEMPLATE_FILE) --event ${ROOT_DIR}/events/update-vehicles-event.json --env-vars $(ENV_FILE_PATH)
 
 .PHONY: package
 package: build
