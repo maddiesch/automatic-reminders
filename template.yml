@@ -17,7 +17,7 @@ Resources:
   Api:
     Type: AWS::Serverless::Api
     Properties:
-      StageName: production
+      StageName: Production
   ApiFunctionHandler:
     Type: AWS::Serverless::Function
     Properties:
@@ -30,12 +30,12 @@ Resources:
           Statement:
             Effect: Allow
             Action:
-              - lambda:Invoke
+              - states:StartExecution
             Resource:
-              - !GetAtt UpdateVehiclesFunctionHandler.Arn
+              - !Ref UpdateAccountStateMachine
       Environment:
         Variables:
-          UPDATE_VEHICLES_FUNCTION: !Ref UpdateVehiclesFunctionHandler
+          UPDATE_ACCOUNT_STATE_MACHINE_ARN: !Ref UpdateAccountStateMachine
       Events:
         RootApiEvent:
           Type: Api
@@ -50,7 +50,7 @@ Resources:
             Method: any
             Path: /{proxy+}
   ##
-  # Functions
+  # Update Account
   UpdateVehiclesFunctionHandler:
     Type: AWS::Serverless::Function
     Properties:
@@ -59,6 +59,149 @@ Resources:
       Policies:
         - AWSLambdaBasicExecutionRole
         - !Ref LambdaPolicy
+  UpdateTripsFunctionHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: build/
+      Handler: update-trips-handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - !Ref LambdaPolicy
+  CreateUpdateFunctionHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: build/
+      Handler: create-update-handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - !Ref LambdaPolicy
+  FinalizeUpdateFunctionHandler:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: build/
+      Handler: finalize-update-handler
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - !Ref LambdaPolicy
+  UpdateAccountStateMachineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - !Sub ["states.${AWS::Region}.amazonaws.com", {}]
+            Action: sts:AssumeRole
+      Path: /
+      Policies:
+        - PolicyName: StatesExecutionPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - lambda:InvokeFunction
+                Resource:
+                  - !GetAtt UpdateVehiclesFunctionHandler.Arn
+                  - !GetAtt UpdateTripsFunctionHandler.Arn
+                  - !GetAtt FinalizeUpdateFunctionHandler.Arn
+                  - !GetAtt CreateUpdateFunctionHandler.Arn
+  UpdateAccountStateMachine:
+    Type: AWS::StepFunctions::StateMachine
+    Properties:
+      RoleArn: !GetAtt UpdateAccountStateMachineRole.Arn
+      DefinitionString: !Sub
+        - |-
+          {
+            "Comment": "Automatic Account Update",
+            "StartAt": "CreateUpdate",
+            "States": {
+              "CreateUpdate": {
+                "Type": "Task",
+                "Resource": "${CreateUpdateFunction}",
+                "Next": "UpdateVehicles",
+                "Catch": [
+                  {
+                    "ErrorEquals": ["UpdateFailure"],
+                    "ResultPath": "$.FailureContext",
+                    "Next": "FinalizeUpdate"
+                  },
+                  {
+                    "ErrorEquals": ["States.ALL"],
+                    "ResultPath": "$.ErrorContext",
+                    "Next": "FinalizeUpdate"
+                  }
+                ]
+              },
+              "UpdateVehicles": {
+                "Type": "Task",
+                "Resource": "${UpdateVehiclesFunction}",
+                "Next": "TriggerTripsUpdate",
+                "Catch": [
+                  {
+                    "ErrorEquals": ["UpdateFailure"],
+                    "ResultPath": "$.FailureContext",
+                    "Next": "FinalizeUpdate"
+                  },
+                  {
+                    "ErrorEquals": ["States.ALL"],
+                    "ResultPath": "$.ErrorContext",
+                    "Next": "FinalizeUpdate"
+                  }
+                ]
+              },
+              "TriggerTripsUpdate": {
+                "Type": "Pass",
+                "Result": {
+                  "Current": "STARTING"
+                },
+                "ResultPath": "$.Context",
+                "Next": "UpdateTrips"
+              },
+              "UpdateTrips": {
+                "Type": "Task",
+                "Resource": "${UpdateTripsFunction}",
+                "Next": "TripsUpdateCompleteCheck",
+                "Catch": [
+                  {
+                    "ErrorEquals": ["UpdateFailure"],
+                    "ResultPath": "$.FailureContext",
+                    "Next": "FinalizeUpdate"
+                  },
+                  {
+                    "ErrorEquals": ["States.ALL"],
+                    "ResultPath": "$.ErrorContext",
+                    "Next": "FinalizeUpdate"
+                  }
+                ]
+              },
+              "TripsUpdateCompleteCheck": {
+                "Type": "Choice",
+                "Choices": [{
+                  "Variable": "$.Context.Current",
+                  "StringEquals": "DONE",
+                  "Next": "FinalizeUpdate"
+                }],
+                "Default": "PreventRateLimit"
+              },
+              "PreventRateLimit": {
+                "Type": "Wait",
+                "Seconds": 2,
+                "Next": "UpdateTrips"
+              },
+              "FinalizeUpdate": {
+                "Type": "Task",
+                "Resource": "${FinalizeUpdateFunction}",
+                "End": true
+              }
+            }
+          }
+        - UpdateVehiclesFunction: !GetAtt UpdateVehiclesFunctionHandler.Arn
+          UpdateTripsFunction: !GetAtt UpdateTripsFunctionHandler.Arn
+          FinalizeUpdateFunction: !GetAtt FinalizeUpdateFunctionHandler.Arn
+          CreateUpdateFunction: !GetAtt CreateUpdateFunctionHandler.Arn
   ##
   # Security Resources
   LambdaPolicy:
@@ -114,7 +257,7 @@ Resources:
     Properties:
       DomainName: !Ref ApiRegionalDomain
       RestApiId: !Ref Api
-      Stage: production
+      Stage: !Ref ApiProductionStage
   ApiRegionalDomainRecords:
     Type: AWS::Route53::RecordSetGroup
     Properties:

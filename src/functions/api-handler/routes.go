@@ -26,6 +26,7 @@ func installRoutes(e *gin.Engine) {
 		account := v1.Group("/account", Authenticate)
 		{
 			account.Handle("GET", "", getAccountHandler)
+			account.Handle("POST", "", postAccountUpdateHandler)
 
 			account.Handle("GET", "/vehicles", getVehiclesHandler)
 		}

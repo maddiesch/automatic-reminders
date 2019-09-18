@@ -7,17 +7,14 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/dynamodb"
-	"github.com/aws/aws-sdk-go/service/lambda"
 	"github.com/gin-gonic/gin"
 	"github.com/maddiesch/automatic-reminders/auto"
 	"github.com/maddiesch/serverless"
-	"github.com/maddiesch/serverless/amazon"
 	"github.com/segmentio/ksuid"
 )
 
@@ -206,20 +203,6 @@ func integrationAutomaticAuthCallback(code, state string) (string, error) {
 		TableName: auto.TableName(),
 		Key:       requestKey,
 	})
-
-	if functionName := os.Getenv("UPDATE_VEHICLES_FUNCTION"); functionName != "" {
-		payload, err := json.Marshal(map[string]interface{}{
-			"AccountID": account.ID,
-		})
-		if err == nil {
-			client := lambda.New(amazon.BaseSession())
-			client.Invoke(&lambda.InvokeInput{
-				FunctionName:   aws.String(functionName),
-				InvocationType: aws.String("Event"),
-				Payload:        payload,
-			})
-		}
-	}
 
 	return apiTokenForAccount(account)
 }

@@ -7,12 +7,15 @@ import (
 
 func main() {
 	lambda.Start(func(event auto.UpdateAccountEvent) (*auto.UpdateAccountEvent, error) {
-		auto.UpdateCurrentUpdateState("UPDATE_VEHICLES", event)
+		response := &event
 
-		err := updateVehiclesForAccount(event.AccountID)
+		auto.UpdateCurrentUpdateState("UPDATING_TRIPS", event)
+
+		err := auto.UpdateTripsForAccountUpdate(response)
 		if err != nil {
 			return nil, err
 		}
-		return &event, nil
+
+		return response, nil
 	})
 }

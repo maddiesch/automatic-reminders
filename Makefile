@@ -34,6 +34,9 @@ all: clean test build
 build:
 	cd $(SRC_DIR)/functions/api-handler && $(GO_LAMBDA_ENV) go build -o $(BUILD_DIR)/api-handler .
 	cd $(SRC_DIR)/functions/update-vehicles-handler && $(GO_LAMBDA_ENV) go build -o $(BUILD_DIR)/update-vehicles-handler .
+	cd $(SRC_DIR)/functions/update-trips-handler && $(GO_LAMBDA_ENV) go build -o $(BUILD_DIR)/update-trips-handler .
+	cd $(SRC_DIR)/functions/create-update-handler && $(GO_LAMBDA_ENV) go build -o $(BUILD_DIR)/create-update-handler .
+	cd $(SRC_DIR)/functions/finalize-update-handler && $(GO_LAMBDA_ENV) go build -o $(BUILD_DIR)/finalize-update-handler .
 
 .PHONY: test
 test: test_cmd := TEST_TABLE_NAME=$(TEST_TABLE_NAME) TESTING_ENV_FILE=$(ENV_FILE_PATH) go test -tags testing -v ./...
@@ -43,6 +46,9 @@ test:
 	cd $(SRC_DIR)/auto && $(test_cmd)
 	cd $(SRC_DIR)/functions/api-handler && $(test_cmd)
 	cd $(SRC_DIR)/functions/update-vehicles-handler && $(test_cmd)
+	cd $(SRC_DIR)/functions/update-trips-handler && $(test_cmd)
+	cd $(SRC_DIR)/functions/create-update-handler && $(test_cmd)
+	cd $(SRC_DIR)/functions/finalize-update-handler && $(test_cmd)
 	aws dynamodb delete-table --table-name $(TEST_TABLE_NAME) --endpoint http://127.0.0.1:8000/ >& /dev/null
 
 .PHONY: clean

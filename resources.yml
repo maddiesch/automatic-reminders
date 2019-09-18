@@ -12,10 +12,6 @@ Resources:
           AttributeType: S
         - AttributeName: SK
           AttributeType: S
-        - AttributeName: LSI1SK
-          AttributeType: S
-        - AttributeName: LSI2SK
-          AttributeType: S
         - AttributeName: GSI1PK
           AttributeType: S
         - AttributeName: GSI1SK
@@ -23,6 +19,10 @@ Resources:
         - AttributeName: GSI2PK
           AttributeType: S
         - AttributeName: GSI2SK
+          AttributeType: S
+        - AttributeName: GSI3PK
+          AttributeType: S
+        - AttributeName: GSI3SK
           AttributeType: S
       KeySchema:
         - AttributeName: PK
@@ -46,23 +46,14 @@ Resources:
               KeyType: RANGE
           Projection:
             ProjectionType: KEYS_ONLY
-      LocalSecondaryIndexes:
-        - IndexName: LSI1
+        - IndexName: GSI3
           KeySchema:
-            - AttributeName: PK
+            - AttributeName: GSI3PK
               KeyType: HASH
-            - AttributeName: LSI1SK
+            - AttributeName: GSI3SK
               KeyType: RANGE
           Projection:
             ProjectionType: ALL
-        - IndexName: LSI2
-          KeySchema:
-            - AttributeName: PK
-              KeyType: HASH
-            - AttributeName: LSI2SK
-              KeyType: RANGE
-          Projection:
-            ProjectionType: KEYS_ONLY
       TimeToLiveSpecification:
         AttributeName: ExpiresAt
         Enabled: true

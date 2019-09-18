@@ -7,20 +7,18 @@ aws dynamodb create-table \
 		--attribute-definitions \
 			"AttributeName=PK,AttributeType=S" \
 			"AttributeName=SK,AttributeType=S" \
-			"AttributeName=LSI1SK,AttributeType=S" \
-			"AttributeName=LSI2SK,AttributeType=S" \
 			"AttributeName=GSI1PK,AttributeType=S" \
 			"AttributeName=GSI1SK,AttributeType=S" \
 			"AttributeName=GSI2PK,AttributeType=S" \
 			"AttributeName=GSI2SK,AttributeType=S" \
+			"AttributeName=GSI3PK,AttributeType=S" \
+			"AttributeName=GSI3SK,AttributeType=S" \
 		--key-schema \
 			"AttributeName=PK,KeyType=HASH" \
 			"AttributeName=SK,KeyType=RANGE" \
-		--local-secondary-indexes \
-			"IndexName=LSI1,KeySchema=[{AttributeName=PK,KeyType=HASH},{AttributeName=LSI1SK,KeyType=RANGE}],Projection={ProjectionType=ALL}" \
-			"IndexName=LSI2,KeySchema=[{AttributeName=PK,KeyType=HASH},{AttributeName=LSI2SK,KeyType=RANGE}],Projection={ProjectionType=KEYS_ONLY}" \
 		--global-secondary-indexes \
 			"IndexName=GSI1,KeySchema=[{AttributeName=GSI1PK,KeyType=HASH},{AttributeName=GSI1SK,KeyType=RANGE}],Projection={ProjectionType=ALL}" \
-			"IndexName=GSI2,KeySchema=[{AttributeName=GSI2PK,KeyType=HASH},{AttributeName=GSI2SK,KeyType=RANGE}],Projection={ProjectionType=KEYS_ONLY}"
+			"IndexName=GSI2,KeySchema=[{AttributeName=GSI2PK,KeyType=HASH},{AttributeName=GSI2SK,KeyType=RANGE}],Projection={ProjectionType=KEYS_ONLY}" \
+			"IndexName=GSI3,KeySchema=[{AttributeName=GSI3PK,KeyType=HASH},{AttributeName=GSI3SK,KeyType=RANGE}],Projection={ProjectionType=ALL}"
 	aws dynamodb wait table-exists --endpoint http://127.0.0.1:8000/ --table-name $1
 
